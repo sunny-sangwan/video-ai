@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Cricket Batting Analysis</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #video-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 16 / 9;
+            height: auto;
+            background: #000;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            touch-action: none;
+        }
+        #zoom-layer {
+            position: absolute;
+            inset: 0;
+            transform-origin: center center;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .drawing-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+        #custom-controls {
+            margin-top: 10px;
+        }
+        #custom-controls button {
+            background: #5c67f2;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 0 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        #custom-controls button:hover {
+            background: #4a54c8;
+        }
+        #custom-controls button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #edit-button {
+            display: none;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background-color: #ffc107;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        #tool-palette {
+            display: none; /* Initially hidden */
+            position: absolute;
+            top: 55px;
+            left: 10px;
+            background-color: rgba(40, 40, 40, 0.9);
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 8px;
+            z-index: 20;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .tool-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #tool-palette button, .tool-item select {
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            padding: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #tool-palette button:hover {
+            background: #555;
+        }
+        #font-size-selector {
+            display: none; /* Hide by default */
+        }
+        .annotation {
+            position: absolute;
+            border: 1px dashed #fff;
+            cursor: move;
+            min-width: 50px;
+            min-height: 40px;
+            box-sizing: border-box;
+            user-select: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            touch-action: none;
+        }
+        .annotation.selected {
+            border: 2px solid #5c67f2;
+        }
+        .annotation .resize-handle {
+            position: absolute;
+            width: clamp(10px, 1.5vw, 14px);
+            height: clamp(10px, 1.5vw, 14px);
+            background: #ffffff;
+            border: 1.5px solid #333;
+            border-radius: 50%;
+            z-index: 30;
+            display: none;
+
+            /* Critical for touch */
+            touch-action: none;
+            box-sizing: border-box;
+        }
+
+        /* Show handles when selected (hover removed for mobile reliability) */
+        .annotation.selected .resize-handle {
+            display: block;
+        }
+
+        /* Correct offset = half of 22px → 11px */
+
+        .resize-handle.n  { top: -7px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+        .resize-handle.s  { bottom: -7px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+        .resize-handle.e  { right: -7px; top: 50%; transform: translateY(-50%); cursor: e-resize; }
+        .resize-handle.w  { left: -7px; top: 50%; transform: translateY(-50%); cursor: w-resize; }
+
+        .resize-handle.nw { top: -7px; left: -7px; cursor: nw-resize; }
+        .resize-handle.ne { top: -7px; right: -7px; cursor: ne-resize; }
+        .resize-handle.sw { bottom: -7px; left: -7px; cursor: sw-resize; }
+        .resize-handle.se { bottom: -7px; right: -7px; cursor: se-resize; }
+
+        .text-annotation-content {
+            width: 100%;
+            height: 100%;
+            padding: 5px;
+            box-sizing: border-box;
+            cursor: text;
+            color: white;
+            background: rgba(0,0,0,0.6);
+        }
+        .scalometer-container {
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+        }
+        .scalometer-title {
+            color: #fff;
+            text-align: center;
+            margin-bottom: 5px;
+            cursor: text;
+        }
+        .scalometer-rating {
+            width: 100%;
+            cursor: pointer;
+        }
+        .scalometer-scale {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #eee;
+            padding: 0 5px;
+        }
+        .patch {
+            background: rgba(255, 0, 0, 0.4);
+            border: 1px solid red;
+        }
+        .circle {
+            border: 3px solid red;   /* reduced thickness */
+            border-radius: 50%;
+            background: transparent;
+            box-sizing: border-box;
+        }
+
+        .polygon {
+            border: 3px solid red;   /* SAME as circle */
+            background: transparent;
+            box-sizing: border-box;
+        }
+        .arrow {
+            background: transparent;
+            box-sizing: border-box;
+        }
+
+        .arrow svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .arrow path {
+            fill: red;
+            stroke: red;
+            stroke-width: 3px; /* SAME as circle & polygon */
+        }
+
+
+
+
+
+        #seekbar-container {
+            width: 100%;
+            max-width: 800px;
+            margin-top: 10px;
+            position: relative;
+        }
+        #seekbar {
+            width: 100%;
+            height: 10px;
+            background-color: #ccc;
+            cursor: pointer;
+            position: relative;
+        }
+        #progress-bar {
+            width: 0;
+            height: 100%;
+            background-color: #5c67f2;
+        }
+        #markers-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
+        .marker {
+            position: absolute;
+            width: 4px;
+            height: 12px;
+            background-color: #ffc107;
+            top: -1px;
+            transform: translateX(-50%);
+            cursor: pointer;
+        }
+        #time-display {
+            text-align: right;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Cricket Batting Analysis</h1>
+    <input type="file" id="video-upload" accept="video/*" />
+    <div id="video-container">
+        <div id="zoom-layer">
+            <video id="video"></video>
+            <!-- annotations will be injected here -->
+        </div>
+        <!-- <video id="video"></video> -->
+        <button id="edit-button"><i class="fas fa-pencil-alt"></i> Edit</button>
+        <div id="tool-palette">
+            <div class="tool-item">
+                <button id="add-text"><i class="fas fa-font"></i> Text</button>
+                <select id="font-size-selector">
+                    <option value="small">S</option>
+                    <option value="medium">M</option>
+                    <option value="large">L</option>
+                </select>
+            </div>
+            <!-- <button id="add-draw"><i class="fas fa-pencil-ruler"></i> Draw</button> -->
+            <button id="add-scalometer"><i class="fas fa-ruler-horizontal"></i> Scale</button>
+            <button id="add-patch"><i class="fas fa-square"></i> Patch</button>
+            <button id="add-circle">
+                <i class="fas fa-circle"></i> Circle
+            </button>
+            <button id="add-polygon">
+                <i class="fas fa-vector-square"></i> Polygon
+            </button>
+            <button id="add-arrow">
+                <i class="fas fa-arrow-right"></i> Arrow
+            </button>
+            <div class="tool-item" id="arrow-controls" style="display:none">
+                <label style="color:white; cursor:pointer;">
+                    <input type="checkbox" id="arrow-flip-toggle">
+                    Flip Arrow
+                </label>
+            </div>
+            
+            
+            
+            
+        </div>
+    </div>
+    <div id="custom-controls">
+        <button id="play-button"><i class="fas fa-play"></i> Play</button>
+        <button id="pause-button"><i class="fas fa-pause"></i> Pause</button>
+        <button id="submit-button"><i class="fas fa-check"></i> Submit</button>
+    </div>
+    <div id="seekbar-container">
+        <div id="seekbar">
+            <div id="markers-container"></div>
+            <div id="progress-bar"></div>
+        </div>
+        <div id="time-display">0:00 / 0:00</div>
+    </div>
+
+    <script>
+        const videoUpload = document.getElementById('video-upload');
+        const video = document.getElementById('video');
+        const videoContainer = document.getElementById('video-container');
+        const zoomLayer = document.getElementById('zoom-layer');
+        const editButton = document.getElementById('edit-button');
+        const toolPalette = document.getElementById('tool-palette');
+        const addTextButton = document.getElementById('add-text');
+        const fontSizeSelector = document.getElementById('font-size-selector');
+        // const addDrawButton = document.getElementById('add-draw');
+        const addScalometerButton = document.getElementById('add-scalometer');
+        const addPatchButton = document.getElementById('add-patch');
+        const addCircleButton = document.getElementById('add-circle');
+        const addPolygonButton = document.getElementById('add-polygon');
+        const addArrowButton = document.getElementById('add-arrow');
+        const playButton = document.getElementById('play-button');
+        const pauseButton = document.getElementById('pause-button');
+        const submitButton = document.getElementById('submit-button');
+        const seekbar = document.getElementById('seekbar');
+        const progressBar = document.getElementById('progress-bar');
+        const markersContainer = document.getElementById('markers-container');
+        const timeDisplay = document.getElementById('time-display');
+        const arrowControls = document.getElementById('arrow-controls');
+        const arrowFlipToggle = document.getElementById('arrow-flip-toggle');
+
+
+        let annotations = [];
+        let selectedAnnotation = null;
+        let currentScale = 1;
+        let initialPinchDistance = null;
+        let initialScale = 1;
+        const minScale = 1;
+        const maxScale = 3;
+
+        // let isDrawingMode = false;
+        // let isDrawing = false;
+        // let currentPath = [];
+
+        videoUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                video.src = URL.createObjectURL(file);
+                editButton.style.display = 'none';
+                toolPalette.style.display = 'none';
+            }
+        });
+        
+        const formatTime = (time) => {
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        };
+
+        video.addEventListener('loadedmetadata', () => {
+            timeDisplay.textContent = `${formatTime(0)} / ${formatTime(video.duration)}`;
+        });
+        
+        video.addEventListener('timeupdate', () => {
+            const progress = (video.currentTime / video.duration) * 100;
+            progressBar.style.width = `${progress}%`;
+            timeDisplay.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+
+            annotations.forEach(a => {
+                const isVisible = video.currentTime >= a.timestamp && video.currentTime <= a.timestamp + 1;
+                a.element.style.display = isVisible ? 'block' : 'none';
+            });
+        });
+
+        seekbar.addEventListener('click', (e) => {
+            const rect = seekbar.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            video.currentTime = pos * video.duration;
+        });
+
+        playButton.addEventListener('click', () => video.play());
+        pauseButton.addEventListener('click', () => video.pause());
+
+        video.addEventListener('pause', () => {
+            if (video.src) editButton.style.display = 'block';
+        });
+
+        video.addEventListener('play', () => {
+            editButton.style.display = 'none';
+            toolPalette.style.display = 'none';
+            deselectAllAnnotations();
+            // disableDrawingMode();
+        });
+
+        editButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toolPalette.style.display = toolPalette.style.display === 'flex' ? 'none' : 'flex';
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!editButton.contains(e.target) && !toolPalette.contains(e.target)) {
+                 toolPalette.style.display = 'none';
+            }
+            if (!e.target.closest('.annotation') && !e.target.closest('#tool-palette')) {
+                deselectAllAnnotations();
+            }
+        });
+        
+        const addAnnotation = (type) => {
+            deselectAllAnnotations(); 
+            // disableDrawingMode(); 
+
+            const { element, canvas, ctx } = createAnnotationElement(type);
+            const annotation = {
+                element,
+                canvas,
+                ctx,
+                timestamp: video.currentTime,
+                type: type,
+                fontSize: type === 'text' ? 'medium' : null,
+                data: type === 'draw' ? [] : null,
+                direction: type === 'arrow' ? 'ltr' : null
+            };
+            annotations.push(annotation);
+            addMarkerForAnnotation(annotation);
+            element.style.display = 'block';
+            selectAnnotation(annotation);
+
+            // if (type === 'draw') {
+            //     enableDrawingMode();
+            // }
+        };
+
+        addTextButton.addEventListener('click', (e) => { e.stopPropagation(); addAnnotation('text'); });
+        // addDrawButton.addEventListener('click', (e) => { e.stopPropagation(); addAnnotation('draw'); });
+        addScalometerButton.addEventListener('click', (e) => { e.stopPropagation(); addAnnotation('scalometer'); });
+        addPatchButton.addEventListener('click', (e) => { e.stopPropagation(); addAnnotation('patch'); });
+        addCircleButton.addEventListener('click', (e) => { e.stopPropagation(); addAnnotation('circle');});
+        addPolygonButton.addEventListener('click', (e) => { e.stopPropagation(); addAnnotation('polygon');});
+        addArrowButton.addEventListener('click', (e) => { e.stopPropagation(); addAnnotation('arrow');});
+        arrowFlipToggle.addEventListener('change', () => {
+            if (!selectedAnnotation || selectedAnnotation.type !== 'arrow') return;
+            selectedAnnotation.direction =
+                selectedAnnotation.direction === 'ltr' ? 'rtl' : 'ltr';
+            updateArrow(selectedAnnotation);
+        });
+
+
+
+
+        fontSizeSelector.addEventListener('change', (e) => {
+            if (selectedAnnotation && selectedAnnotation.type === 'text') {
+                selectedAnnotation.fontSize = e.target.value;
+                updateTextAnnotationStyle(selectedAnnotation);
+            }
+        });
+
+        function getDistance(touch1, touch2) {
+            const dx = touch1.clientX - touch2.clientX;
+            const dy = touch1.clientY - touch2.clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+
+        function updateTextAnnotationStyle(annotation) {
+            const heightMap = { small: '40px', medium: '60px', large: '80px' };
+            const fontSizeMap = { small: '14px', medium: '24px', large: '36px' };
+            annotation.element.style.height = heightMap[annotation.fontSize];
+            annotation.element.querySelector('.text-annotation-content').style.fontSize = fontSizeMap[annotation.fontSize];
+        }
+
+        function updateArrow(annotation) {
+            const el = annotation.element;
+            const path = el._path;
+            const w = el.clientWidth;
+            const h = el.clientHeight;
+
+            path.setAttribute('d', getArrowPath(w, h, annotation.direction));
+        }
+
+        function addMarkerForAnnotation(annotation) {
+            if (!video.duration) return;
+            const marker = document.createElement('div');
+            marker.className = 'marker';
+            marker.style.left = `${(annotation.timestamp / video.duration) * 100}%`;
+            marker.addEventListener('click', (e) => {
+                e.stopPropagation();
+                video.currentTime = annotation.timestamp;
+            });
+            markersContainer.appendChild(marker);
+        }
+
+        function getArrowPath(width, height, direction) {
+            // 🔑 MUCH smaller arrow head
+            const headLength = Math.min(width * 0.10, 14);   // length of head
+            const shaftHalf = height * 0.12;                 // shaft thickness
+
+            if (direction === 'rtl') {
+                return `
+                    M ${width} ${height / 2}
+                    L ${headLength} ${height / 2}
+                    L ${headLength + shaftHalf} ${height / 2 - shaftHalf}
+                    L 0 ${height / 2}
+                    L ${headLength + shaftHalf} ${height / 2 + shaftHalf}
+                    L ${headLength} ${height / 2}
+                    Z
+                `;
+            }
+
+            // left → right
+            return `
+                M 0 ${height / 2}
+                L ${width - headLength} ${height / 2}
+                L ${width - headLength - shaftHalf} ${height / 2 - shaftHalf}
+                L ${width} ${height / 2}
+                L ${width - headLength - shaftHalf} ${height / 2 + shaftHalf}
+                L ${width - headLength} ${height / 2}
+                Z
+            `;
+        }
+
+
+
+        function createAnnotationElement(type) {
+            const element = document.createElement('div');
+            element.className = 'annotation';
+            zoomLayer.appendChild(element);
+            let canvas = null, ctx = null;
+
+            if (type === 'text') {
+                element.style.width = '150px';
+                const content = document.createElement('div');
+                content.className = 'text-annotation-content';
+                content.contentEditable = 'true';
+                content.innerText = 'Type feedback...';
+                element.appendChild(content);
+                updateTextAnnotationStyle({element, fontSize: 'medium'});
+            } else if (type === 'scalometer') {
+                element.classList.add('scalometer-container');
+                element.style.width = '200px';
+                element.style.height = '85px';
+                element.innerHTML = `
+                    <div class="scalometer-title" contenteditable="true">Head Position</div>
+                    <input type="range" min="0" max="10" value="5" class="scalometer-rating">
+                    <div class="scalometer-scale">
+                        <span>0</span><span>2</span><span>4</span><span>6</span><span>8</span><span>10</span>
+                    </div>
+                `;
+            } else if (type === 'patch') {
+                element.classList.add('patch');
+                element.style.width = '100px';
+                element.style.height = '100px';
+            }
+              else if (type === 'circle') {
+                element.classList.add('circle');
+                element.style.width = '120px';
+                element.style.height = '120px';
+            }
+              else if (type === 'polygon') {
+                element.classList.add('polygon');
+
+                /* Start as a square */
+                element.style.width = '120px';
+                element.style.height = '120px';
+            }
+            else if (type === 'arrow') {
+                element.classList.add('arrow');
+
+                element.style.width = '140px';
+                element.style.height = '50px';
+
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+
+                svg.appendChild(path);
+                element.appendChild(svg);
+
+                element._svg = svg;
+                element._path = path;
+
+                // 🔑 ADD THIS
+                setTimeout(() => {
+                    updateArrow({ element, direction: 'ltr' });
+                }, 0);
+            }
+
+
+
+
+ 
+            //   else if (type === 'draw') {
+            //     element.style.border = 'none';
+            //     element.style.pointerEvents = 'none';
+
+            //     const videoRect = getVideoRect();
+            //     const containerRect = videoContainer.getBoundingClientRect();
+
+            //     element.style.left = `${videoRect.x - containerRect.x}px`;
+            //     element.style.top = `${videoRect.y - containerRect.y}px`;
+            //     element.style.width = `${videoRect.width}px`;
+            //     element.style.height = `${videoRect.height}px`;
+
+            //     canvas = document.createElement('canvas');
+            //     canvas.className = 'drawing-canvas';
+
+            //     canvas.width = videoRect.width;
+            //     canvas.height = videoRect.height;
+
+            //     canvas.style.width = '100%';
+            //     canvas.style.height = '100%';
+
+            //     ctx = canvas.getContext('2d');
+            //     ctx.strokeStyle = 'red';
+            //     ctx.lineWidth = 3;
+            //     ctx.lineCap = 'round';
+
+            //     element.appendChild(canvas);
+            // }
+
+            
+            if (type !== 'draw') {
+                element.style.top = '30%';
+                element.style.left = '30%';
+                makeInteractive(element);
+            }
+            // toolPalette.style.display = 'none';
+            return { element, canvas, ctx };
+        }
+
+        function selectAnnotation(annotation) {
+            deselectAllAnnotations();
+            selectedAnnotation = annotation;
+            annotation.element.classList.add('selected');
+            toolPalette.style.display = 'flex';
+            if (annotation.type === 'arrow') {
+                arrowControls.style.display = 'block';
+                arrowFlipToggle.checked = annotation.direction === 'rtl';
+            }
+
+            else if (annotation.type === 'text') {
+                fontSizeSelector.style.display = 'block';
+                fontSizeSelector.value = annotation.fontSize;
+            } 
+            // else if (annotation.type === 'draw') {
+            //     enableDrawingMode();
+            // }
+            addDeleteButton(annotation);
+        }
+
+        // Function to deselect all
+        function deselectAllAnnotations() {
+            annotations.forEach(a => a.element.classList.remove('selected'));
+            selectedAnnotation = null;
+            fontSizeSelector.style.display = 'none';
+            toolPalette.style.display = 'none';
+            arrowControls.style.display = 'none';
+            // disableDrawingMode();
+        }
+
+        // Add red delete button to annotation
+        function addDeleteButton(annotation) {
+            
+            let btn = annotation.element.querySelector('.delete-btn');
+            if (!btn) {
+                btn = document.createElement('div');
+                btn.className = 'delete-btn';
+                btn.innerText = '×';
+
+                btn.style.position = 'absolute';
+                btn.style.lineHeight = '1';
+                btn.style.top = '-8px';
+                btn.style.right = '-8px';
+                btn.style.width = 'clamp(14px, 1.8vw, 20px)';
+                btn.style.height = 'clamp(14px, 1.8vw, 20px)';
+                btn.style.fontSize = 'clamp(10px, 1.2vw, 14px)';
+                // btn.style.lineHeight = '16px';
+                btn.style.background = 'red';
+                btn.style.color = 'white';
+                btn.style.borderRadius = '50%';
+                btn.style.textAlign = 'center';
+                btn.style.cursor = 'pointer';
+                // btn.style.lineHeight = '18px';
+                btn.style.zIndex = '100';
+
+                // 🔑 CRITICAL FIX
+                btn.style.pointerEvents = 'auto';
+
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeAnnotation(annotation);
+                });
+
+                annotation.element.appendChild(btn);
+            }
+        }
+
+        // Remove annotation function
+        function removeAnnotation(annotation) {
+            annotation.element.remove();
+            annotations = annotations.filter(a => a !== annotation);
+            if (selectedAnnotation === annotation) selectedAnnotation = null;
+        }
+
+        // Delete key support
+        document.addEventListener('keydown', (e) => {
+            if (!selectedAnnotation) return;
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                removeAnnotation(selectedAnnotation);
+            }
+        });
+
+        function getVideoRect() {
+            const containerRect = zoomLayer.getBoundingClientRect();
+            const videoAspectRatio = video.videoWidth / video.videoHeight;
+            const containerAspectRatio = containerRect.width / containerRect.height;
+            
+            let videoDisplayWidth, videoDisplayHeight, videoOffsetX, videoOffsetY;
+
+            if (videoAspectRatio > containerAspectRatio) {
+                videoDisplayWidth = containerRect.width;
+                videoDisplayHeight = videoDisplayWidth / videoAspectRatio;
+                videoOffsetX = 0;
+                videoOffsetY = (containerRect.height - videoDisplayHeight) / 2;
+            } else {
+                videoDisplayHeight = containerRect.height;
+                videoDisplayWidth = videoDisplayHeight * videoAspectRatio;
+                videoOffsetY = 0;
+                videoOffsetX = (containerRect.width - videoDisplayWidth) / 2;
+            }
+
+            return { 
+                left: containerRect.left + videoOffsetX,
+                top: containerRect.top + videoOffsetY,
+                width: videoDisplayWidth,
+                height: videoDisplayHeight,
+                x: containerRect.x + videoOffsetX,
+                y: containerRect.y + videoOffsetY
+            };
+        }
+
+        submitButton.addEventListener('click', async () => {
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing';
+
+            const previousTransform = zoomLayer.style.transform;
+            // const previousScale = currentScale;
+
+            zoomLayer.style.transform = "scale(1)";
+            // currentScale = 1;
+
+            const formData = new FormData();
+            const videoFile = await fetch(video.src).then(res => res.blob());
+            formData.append('video', videoFile, 'video.mp4');
+
+            const actualVideoRect = getVideoRect();
+            
+            const originalDisplays = annotations.map(a => a.element.style.display);
+            annotations.forEach(a => a.element.style.display = 'block');
+
+            const annotationData = annotations.map(a => {
+                let textContent = '';
+                let rating = 0;
+                let drawingPoints = [];
+
+                if (a.type === 'text') {
+                    textContent = a.element.querySelector('.text-annotation-content').innerText;
+                } else if (a.type === 'scalometer') {
+                    textContent = a.element.querySelector('.scalometer-title').innerText;
+                    rating = a.element.querySelector('.scalometer-rating').value;
+                } 
+                // else if (a.type === 'draw') {
+                //     const videoRect = getVideoRect();
+
+                //     drawingPoints = a.data.map(path =>
+                //         path.map(p => ({
+                //             x: p.x / videoRect.width,
+                //             y: p.y / videoRect.height
+                //         }))
+                //     );
+                // }
+                
+                const annotationRect = a.element.getBoundingClientRect();
+
+                return {
+                    type: a.type,
+                    timestamp: a.timestamp,
+                    direction: a.direction,
+                    x: (annotationRect.left - actualVideoRect.x) / actualVideoRect.width,
+                    y: (annotationRect.top - actualVideoRect.y) / actualVideoRect.height,
+                    width: annotationRect.width / actualVideoRect.width,
+                    height: annotationRect.height / actualVideoRect.height,
+                    text: textContent,
+                    fontSizeName: a.fontSize,
+                    rating: rating,
+                    // drawing: drawingPoints,
+                };
+            });
+            
+            annotations.forEach((a, i) => a.element.style.display = originalDisplays[i]);
+
+            formData.append('annotations', JSON.stringify(annotationData));
+
+            fetch('/process', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+                return response.blob();
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'telestrated_video.mp4';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+            })
+            .catch(error => {
+                console.error('Processing failed:', error);
+                alert('An error occurred during video processing. Please check the console for details.');
+            })
+            .finally(() => {
+                zoomLayer.style.transform = previousTransform;
+                // currentScale = previousScale;
+
+                submitButton.disabled = false;
+                submitButton.innerHTML = '<i class="fas fa-check"></i> Submit';
+            });
+        });
+
+        function makeInteractive(element) {
+
+            element.addEventListener('pointerdown', (e) => {
+
+                // 🔥 ALWAYS re-select when clicked
+                const annotation = annotations.find(a => a.element === element);
+                if (annotation) {
+                    selectAnnotation(annotation);
+                }
+
+                if (
+                    e.target.isContentEditable ||
+                    e.target.tagName === 'INPUT' ||
+                    e.target.classList.contains('resize-handle') ||
+                    e.target.classList.contains('delete-btn')
+                ) return;
+
+                e.preventDefault();
+
+                let startX = e.clientX;
+                let startY = e.clientY;
+                let startLeft = element.offsetLeft;
+                let startTop = element.offsetTop;
+
+                function onMove(e) {
+                    let dx = (e.clientX - startX) / currentScale;
+                    let dy = (e.clientY - startY) / currentScale;
+
+                    element.style.left = startLeft + dx + 'px';
+                    element.style.top = startTop + dy + 'px';
+                }
+
+                function onUp() {
+                    document.removeEventListener('pointermove', onMove);
+                    document.removeEventListener('pointerup', onUp);
+                }
+
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+            });
+
+            const handles = ['n','s','e','w','nw','ne','sw','se'];
+
+            handles.forEach(handleName => {
+                const handle = document.createElement('div');
+                handle.className = `resize-handle ${handleName}`;
+                element.appendChild(handle);
+
+                handle.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+
+                    const annotation = annotations.find(a => a.element === element);
+                    if (annotation) {
+                        selectAnnotation(annotation);
+                    }
+
+                    let startX = e.clientX;
+                    let startY = e.clientY;
+                    let startWidth = element.offsetWidth;
+                    let startHeight = element.offsetHeight;
+                    let startLeft = element.offsetLeft;
+                    let startTop = element.offsetTop;
+
+                    function onMove(e) {
+                        let dx = (e.clientX - startX) / currentScale;
+                        let dy = (e.clientY - startY) / currentScale;
+
+                        let newWidth = startWidth;
+                        let newHeight = startHeight;
+                        let newLeft = startLeft;
+                        let newTop = startTop;
+
+                        if (handleName.includes('e')) newWidth += dx;
+                        if (handleName.includes('s')) newHeight += dy;
+                        if (handleName.includes('w')) {
+                            newWidth -= dx;
+                            newLeft += dx;
+                        }
+                        if (handleName.includes('n')) {
+                            newHeight -= dy;
+                            newTop += dy;
+                        }
+
+                        if (newWidth > 40) {
+                            element.style.width = newWidth + 'px';
+                            element.style.left = newLeft + 'px';
+                        }
+
+                        if (newHeight > 30) {
+                            element.style.height = newHeight + 'px';
+                            element.style.top = newTop + 'px';
+                        }
+
+                        if (annotation?.type === 'arrow') {
+                            updateArrow(annotation);
+                        }
+                    }
+
+                    function onUp() {
+                        document.removeEventListener('pointermove', onMove);
+                        document.removeEventListener('pointerup', onUp);
+                    }
+
+                    document.addEventListener('pointermove', onMove);
+                    document.addEventListener('pointerup', onUp);
+                });
+            });
+            }
+
+
+        // function enableDrawingMode() {
+        //     if (!selectedAnnotation || selectedAnnotation.type !== 'draw') return;
+        //     isDrawingMode = true;
+        //     selectedAnnotation.canvas.style.pointerEvents = 'auto';
+        //     videoContainer.style.cursor = 'crosshair';
+        // }
+
+        // function disableDrawingMode() {
+        //     if (isDrawingMode) {
+        //          annotations.filter(a => a.type === 'draw').forEach(a => {
+        //             if (a.canvas) a.canvas.style.pointerEvents = 'none';
+        //         });
+        //         videoContainer.style.cursor = 'default';
+        //         isDrawingMode = false;
+        //         isDrawing = false;
+        //     }
+        // }
+        
+        // videoContainer.addEventListener('mousedown', (e) => {
+        //     if (!isDrawingMode || !selectedAnnotation || selectedAnnotation.type !== 'draw') return;
+        //     isDrawing = true;
+        //     const rect = selectedAnnotation.canvas.getBoundingClientRect();
+        //     const x = (e.clientX - rect.left) * (selectedAnnotation.canvas.width / rect.width);
+        //     const y = (e.clientY - rect.top) * (selectedAnnotation.canvas.height / rect.height);
+        //     currentPath = [{x, y}];
+        //     selectedAnnotation.ctx.beginPath();
+        //     selectedAnnotation.ctx.moveTo(x, y);
+        //     selectedAnnotation.ctx.strokeStyle = 'red';
+        //     selectedAnnotation.ctx.lineWidth = 3;
+        // });
+
+        // videoContainer.addEventListener('mousemove', (e) => {
+        //     if (!isDrawingMode || !isDrawing) return;
+        //     const rect = selectedAnnotation.canvas.getBoundingClientRect();
+        //     const x = (e.clientX - rect.left) * (selectedAnnotation.canvas.width / rect.width);
+        //     const y = (e.clientY - rect.top) * (selectedAnnotation.canvas.height / rect.height);
+        //     currentPath.push({x, y});
+        //     selectedAnnotation.ctx.lineTo(x, y);
+        //     selectedAnnotation.ctx.stroke();
+        // });
+
+        // videoContainer.addEventListener('mouseup', () => {
+        //     if (!isDrawingMode || !isDrawing) return;
+        //     isDrawing = false;
+        //     if (selectedAnnotation && selectedAnnotation.type === 'draw') {
+        //         selectedAnnotation.data.push(currentPath);
+        //     }
+        //     currentPath = [];
+        // });
+
+        // videoContainer.addEventListener('mouseleave', () => {
+        //     if (isDrawingMode && isDrawing) {
+        //         isDrawing = false;
+        //         if (selectedAnnotation && selectedAnnotation.type === 'draw') {
+        //             selectedAnnotation.data.push(currentPath);
+        //         }
+        //         currentPath = [];
+        //     }
+        // });
+
+
+        let activePointers = new Map();
+
+        videoContainer.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.annotation')) return; // prevent pinch when interacting with annotation
+
+            activePointers.set(e.pointerId, e);
+
+            if (activePointers.size === 2) {
+                const pointers = Array.from(activePointers.values());
+                initialPinchDistance = getDistance(pointers[0], pointers[1]);
+                initialScale = currentScale;
+            }
+        });
+
+
+        videoContainer.addEventListener('pointermove', (e) => {
+            if (!activePointers.has(e.pointerId)) return;
+
+            activePointers.set(e.pointerId, e);
+
+            if (activePointers.size === 2) {
+                const pointers = Array.from(activePointers.values());
+                const currentDistance = getDistance(pointers[0], pointers[1]);
+
+                if (initialPinchDistance) {
+                    let scaleFactor = currentDistance / initialPinchDistance;
+                    currentScale = initialScale * scaleFactor;
+
+                    currentScale = Math.max(minScale, Math.min(maxScale, currentScale));
+
+                    zoomLayer.style.transform = `scale(${currentScale})`;
+                }
+            }
+        });
+
+        videoContainer.addEventListener('pointerup', (e) => {
+            activePointers.delete(e.pointerId);
+            if (activePointers.size < 2) {
+                initialPinchDistance = null;
+            }
+        });
+
+        videoContainer.addEventListener('pointercancel', (e) => {
+            activePointers.delete(e.pointerId);
+        });
+
+    </script>
+</body>
+</html>
