@@ -830,7 +830,7 @@
             })
             .catch(error => {
                 console.error('Processing failed:', error);
-                alert('An error occurred during video processing. Please check the console for details.');
+                alert('An error occurred during video processing. Please check the console for details.',error);
             })
             .finally(() => {
                 zoomLayer.style.transform = previousTransform;
