@@ -274,10 +274,11 @@
 </head>
 <body>
     <h1>Cricket Batting Analysis</h1>
-    <input type="file" id="video-upload" accept="video/*" />
+    <!-- <input type="file" id="video-upload" accept="video/*" /> -->
     <div id="video-container">
         <div id="zoom-layer">
-            <video id="video"></video>
+            <!-- <video id="video"></video> -->
+            <video id="video" src="/video/{{ video_id }}" controls></video>
             <!-- annotations will be injected here -->
         </div>
         <!-- <video id="video"></video> -->
@@ -329,7 +330,7 @@
     </div>
 
     <script>
-        const videoUpload = document.getElementById('video-upload');
+        // const videoUpload = document.getElementById('video-upload');
         const video = document.getElementById('video');
         const videoContainer = document.getElementById('video-container');
         const zoomLayer = document.getElementById('zoom-layer');
@@ -366,14 +367,14 @@
         // let isDrawing = false;
         // let currentPath = [];
 
-        videoUpload.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                video.src = URL.createObjectURL(file);
-                editButton.style.display = 'none';
-                toolPalette.style.display = 'none';
-            }
-        });
+        // videoUpload.addEventListener('change', (e) => {
+        //     const file = e.target.files[0];
+        //     if (file) {
+        //         video.src = URL.createObjectURL(file);
+        //         editButton.style.display = 'none';
+        //         toolPalette.style.display = 'none';
+        //     }
+        // });
         
         const formatTime = (time) => {
             const minutes = Math.floor(time / 60);
@@ -768,42 +769,26 @@
             submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing';
 
             const previousTransform = zoomLayer.style.transform;
-            // const previousScale = currentScale;
-
             zoomLayer.style.transform = "scale(1)";
-            // currentScale = 1;
 
             const formData = new FormData();
-            const videoFile = await fetch(video.src).then(res => res.blob());
-            formData.append('video', videoFile, 'video.mp4');
 
             const actualVideoRect = getVideoRect();
-            
+
             const originalDisplays = annotations.map(a => a.element.style.display);
             annotations.forEach(a => a.element.style.display = 'block');
 
             const annotationData = annotations.map(a => {
                 let textContent = '';
                 let rating = 0;
-                let drawingPoints = [];
 
                 if (a.type === 'text') {
                     textContent = a.element.querySelector('.text-annotation-content').innerText;
                 } else if (a.type === 'scalometer') {
                     textContent = a.element.querySelector('.scalometer-title').innerText;
                     rating = a.element.querySelector('.scalometer-rating').value;
-                } 
-                // else if (a.type === 'draw') {
-                //     const videoRect = getVideoRect();
+                }
 
-                //     drawingPoints = a.data.map(path =>
-                //         path.map(p => ({
-                //             x: p.x / videoRect.width,
-                //             y: p.y / videoRect.height
-                //         }))
-                //     );
-                // }
-                
                 const annotationRect = a.element.getBoundingClientRect();
 
                 return {
@@ -816,14 +801,14 @@
                     height: annotationRect.height / actualVideoRect.height,
                     text: textContent,
                     fontSizeName: a.fontSize,
-                    rating: rating,
-                    // drawing: drawingPoints,
+                    rating: rating
                 };
             });
-            
+
             annotations.forEach((a, i) => a.element.style.display = originalDisplays[i]);
 
             formData.append('annotations', JSON.stringify(annotationData));
+            formData.append('video_id', "{{ video_id }}");
 
             fetch('/process', {
                 method: 'POST',
